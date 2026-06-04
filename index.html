@@ -2,10 +2,10 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>完全突破版 LiteTube</title>
+    <title>完全突破版 LiteTube (バグ修正済)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; text-align: center; background: #111; color: #eee; }
-        #url { width: 70%; padding: 12px; font-size: 16px; border: 1px solid #44px; background: #222; color: #fff; border-radius: 4px; }
+        #url { width: 70%; padding: 12px; font-size: 16px; border: 1px solid #444; background: #222; color: #fff; border-radius: 4px; }
         .btn { padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; margin: 5px; background: #28a745; color: white; }
         .btn:hover { background: #218838; }
         #status-box { background: #222; border: 1px solid #444; padding: 15px; border-radius: 5px; max-width: 800px; margin: 20px auto; text-align: left; font-family: monospace; font-size: 14px; }
@@ -15,7 +15,7 @@
 </head>
 <body>
 
-    <h2>完全規制突破版 LiteTube</h2>
+    <h2>完全規制突破版 LiteTube (バグ修正済)</h2>
     <p style="font-size: 13px; color: #aaa;">YouTubeが完全遮断されたChromebookでも、動画データを直引きして再生します。</p>
     
     <input id="url" placeholder="YouTubeの動画URLをペースト">
@@ -35,26 +35,27 @@
     function bypassAndLoad() {
         const url = document.getElementById("url").value.trim();
         
-        // 動画IDを抽出
+        // YouTubeの各種URLから動画IDを取り出す正規表現
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
-        const videoId = (match && match.length === 11) ? match : null;
+        
+        // 【修正完了】match[2] に入っている動画IDそのものの文字数が「11文字」であるかを正しくチェック
+        const videoId = (match && match[2] && match[2].length === 11) ? match[2] : null;
 
         if (!videoId) {
-            alert("URLから動画のIDが読み取れませんでした。");
+            alert("URLから動画のID（11文字）が読み取れませんでした。もう一度URLを確認してください。");
             return;
         }
 
         // ログエリアに情報を可視化
         document.getElementById("status-text").innerHTML = 
-            `▶ <span class="info">[解析成功]</span> 動画ID: <b>${videoId}</b><br>` +
+            `▶ <span class="info">[解析成功]</span> 動画ID: <b>${videoId}</b> を検出しました！<br>` +
             `YouTubeのサーバーをバイパスし、外部の動画ストリームへ直接接続を試みています...`;
 
-        // 💡 外部の動画変換API（Cobalt等）を利用して、YouTubeの動画データを「生MP4」として裏から引っ張るURLを生成
-        // これにより、iframeの悲しそうな顔（YouTube自体のブロック）を100%回避します
+        // 外部のオープンソースAPIを利用して、YouTubeの動画を「生MP4ファイル」として裏から引っ張るURL
         const proxyStreamUrl = `https://wuk.sh{videoId}&quality=720`;
 
-        // YouTubeプレイヤーではなく、ただの動画ファイルを再生するプレイヤー（<video>）として出力
+        // iframe（埋め込み）ではなく、ただの動画ファイルを再生するプレイヤー（<video>）として出力
         document.getElementById("player").innerHTML =
             `<video 
                 width="100%" 
