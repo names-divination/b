@@ -2,105 +2,81 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>可視化版 LiteTube</title>
+    <title>可視化版 LiteTube (修正版)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; text-align: center; background: #fafafa; color: #333; }
         #url { width: 70%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
         .btn { padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
-        .btn-start { background: #28a745; color: white; }
-        .btn-change { background: #ffc107; color: #212529; }
+        .btn-start { background: #007bff; color: white; }
+        .btn-bypass { background: #dc3545; color: white; }
         #status-box { background: #e9ecef; padding: 15px; border-radius: 5px; max-width: 800px; margin: 20px auto; text-align: left; font-family: monospace; font-size: 14px; }
         #player { margin-top: 20px; max-width: 800px; margin-left: auto; margin-right: auto; }
         .success { color: green; font-weight: bold; }
-        .warning { color: #856404; font-weight: bold; }
+        .warning { color: #d39e00; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>可視化・回避機能付き LiteTube</h2>
+    <h2>規制回避型 LiteTube (修正版)</h2>
     
     <input id="url" placeholder="YouTubeのURLをペースト">
     <div>
-        <button class="btn btn-start" onclick="loadVideo(0)">1. 動画を流す</button>
-        <button class="btn btn-change" onclick="changeServer()">2. ブロックされたら別のサーバーに変える</button>
+        <button class="btn btn-start" onclick="loadVideo('nocookie')">ルート1で流す</button>
+        <button class="btn btn-bypass" onclick="loadVideo('direct')">フィルターが厳しければルート2</button>
     </div>
 
-    <!-- デベロッパーツールが見えない代わりに状況を表示するエリア -->
+    <!-- 状況が見えるログエリア -->
     <div id="status-box">
         <div><strong>【現在の接続ステータス】</strong></div>
-        <div id="status-text">動画のURLを入力して「動画を流す」を押してください。</div>
-        <div id="direct-link-area" style="margin-top: 10px;"></div>
+        <div id="status-text">URLを入力してボタンを押してください。</div>
     </div>
 
     <div id="player"></div>
 
     <script>
-    // Chromebookの規制網にまだ見つかっていない可能性のある、世界中の予備中継サーバーのリスト
-    const servers = [
-        { name: "Piped (公式ミラー)", url: "https://piped.video" },
-        { name: "Invidious (Nadeko)", url: "https://nadeko.net" },
-        { name: "Piped (SyncPundit)", url: "https://syncpundit.io" },
-        { name: "Invidious (Libranet)", url: "https://lunar.icu" },
-        { name: "Piped (Moomoo)", url: "https://moomoo.me" }
-    ];
-    
-    let currentServerIndex = 0;
-    let savedVideoId = "";
-
-    function loadVideo(serverIndex) {
+    function loadVideo(type) {
         const url = document.getElementById("url").value.trim();
         
-        // URLから動画IDを抽出
+        // YouTubeの各種URLから動画ID（11文字の英数字）を抜き出す正規表現
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
-        const videoId = (match && match.length == 11) ? match[2] : null;
+        
+        // 正しくIDが取れて、かつそれが11文字であることを厳密にチェック（バグを修正）
+        const videoId = (match && match[2].length === 11) ? match[2] : null;
 
         if (!videoId) {
             alert("正しいYouTubeのURLを入力してください。");
             return;
         }
 
-        savedVideoId = videoId;
-        currentServerIndex = serverIndex;
-        
-        const server = servers[currentServerIndex];
-        const embedUrl = `${server.url}${videoId}?autoplay=1`;
+        let embedUrl = "";
+        let routeName = "";
 
-        // 状況確認用のログを画面にリアルタイム出力
+        if (type === 'nocookie') {
+            routeName = "公式裏ルート (youtube-nocookie)";
+            // 各種制限を突破するための公式パラメータを付与
+            embedUrl = `https://youtube-nocookie.com{videoId}?autoplay=1&modestbranding=1&rel=0&embeds_referring_euri=https%3A%2F%2Fgithub.com%2F`;
+        } else {
+            routeName = "通常埋め込みルート (youtube.com)";
+            embedUrl = `https://youtube.com{videoId}?autoplay=1`;
+        }
+
+        // 状況をログ出力
         document.getElementById("status-text").innerHTML = 
-            `▶ <span class="success">変更適用：</span> 現在、[<span class="warning">${server.name}</span>] を使って動画を読み込んでいます。<br>` +
-            `URLを変更しました ➔ <small>${embedUrl}</small>`;
+            `▶ <span class="success">変更適用：</span> 現在、[<span class="warning">${routeName}</span>] を使用中。<br>` +
+            `動画ID [<b>${videoId}</b>] を正常に認識しました！<br>` +
+            `生成URL ➔ <small>${embedUrl}</small>`;
 
-        // 直リンク生存確認ボタンを表示（ここを押して「ブロック画面」が出たらそのサーバーは全滅という意味）
-        document.getElementById("direct-link-area").innerHTML = 
-            `💡 <b>もし画面が悲しそうな顔（拒否）になった場合：</b><br>` +
-            `確認のために <a href="${server.url}" target="_blank" style="color: blue; text-decoration: underline;">[この中継サイトのトップを開けるか直接テスト]</a> してみてください。<br>` +
-            `開けなければChromebookにこのドメインごとブロックされています。「別のサーバーに変える」を押してください。`;
-
-        // プレイヤーに反映
+        // プレイヤーを出力
         document.getElementById("player").innerHTML =
             `<iframe
                 width="100%"
                 height="450"
                 src="${embedUrl}"
                 frameborder="0"
-                allow="autoplay; encrypted-media; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowfullscreen>
             </iframe>`;
-    }
-
-    // ブロックされた場合に、次のサーバーに切り替える関数
-    function changeServer() {
-        if (!savedVideoId) {
-            alert("先にYouTubeのURLを入力して、一度「動画を流す」を押してください。");
-            return;
-        }
-        
-        // 次の予備サーバーへ切り替え（リストの最後まで行ったら最初に戻る）
-        currentServerIndex = (currentServerIndex + 1) % servers.length;
-        
-        // 新しいサーバーで再読み込み
-        loadVideo(currentServerIndex);
     }
     </script>
 
