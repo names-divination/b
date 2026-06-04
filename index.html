@@ -1,0 +1,36 @@
+<input id="url">
+
+<button onclick="loadVideo()">
+表示
+</button>
+
+<div id="player"></div>
+
+<script>
+
+function loadVideo(){
+
+  const url =
+    document
+      .getElementById("url")
+      .value;
+
+  const id =
+    url.match(
+      /(?:v=|youtu\.be\/)([^&]+)/)
+      ?.[1];
+
+  document
+    .getElementById("player")
+    .innerHTML =
+
+    `<iframe
+      width="100%"
+      height="500"
+      src="https://www.youtube.com/embed/${id}"
+      allowfullscreen>
+    </iframe>`;
+
+}
+
+</script>
