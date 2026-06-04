@@ -14,8 +14,8 @@
 </head>
 <body>
 
-    <h2>パケットリセット機能付き LiteTube</h2>
-    <p style="font-size: 13px; color: #aaa;">数分で止まってしまうChromebookのパケット監視を回避する実験コードです。</p>
+    <h2>パケットリセット機能付き LiteTube (バグ修正版)</h2>
+    <p style="font-size: 13px; color: #aaa;">Startpageの挙動をヒントにした、2分の壁を突破するための実験コードです。</p>
     
     <input id="url" placeholder="YouTubeの動画URLをペースト">
     <div>
@@ -24,7 +24,7 @@
 
     <div id="status-box">
         <div><strong>【パケット監視 回避ステータス】</strong></div>
-        <div id="status-text">動画のURLを入力してボタンを押してください。</div>
+        <div id="status-text">URLを入力してボタンを押してください。</div>
     </div>
 
     <div id="player"></div>
@@ -34,23 +34,27 @@
 
     function loadDisguisedVideo() {
         const url = document.getElementById("url").value.trim();
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        
+        // シンプルに「v=」の後ろか「youtu.be/」の後ろにある11文字のIDだけを引っこ抜く確実な設定
+        const regExp = /(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/;
         const match = url.match(regExp);
-        const videoId = (match && match.length === 11) ? match : null;
 
-        if (!videoId) {
-            alert("動画のIDが読み取れませんでした。");
+        // バグの温床になっていた複雑な判定をすべて捨て、IDが取れたかどうかだけで進む
+        if (!match) {
+            alert("URLから動画のIDが見つかりませんでした。もう一度URLを確認してください。");
             return;
         }
 
-        // 監視の目をかいくぐるため、Googleのデータ軽量化プロキシのルートを偽装して動画ストリームを作成
-        // Startpageが使っている「安全なプロキシ通信」の挙動を再現します
+        const videoId = match[1]; // これで確実に「99HBc1Y7J2w」が取れます
+
+        // フィルターをすり抜けるためのGoogle公式プロキシ偽装ルート
         const targetStream = `https://googleusercontent.com{encodeURIComponent('https://yewtu.be' + videoId + '&itag=18')}`;
 
         document.getElementById("status-text").innerHTML = 
-            `▶ <span class="info">[パケット偽装開始]</span> 制限タイマーをリセットしながら再生します...`;
+            `▶ <span class="info">[動画認識成功]</span> ID: <b>${videoId}</b><br>` +
+            `▶ 制限タイマーをリセットしながら再生の準備をしています...`;
 
-        // プレイヤーに流し込む（通常のvideoタグ）
+        // プレイヤーを出力
         document.getElementById("player").innerHTML =
             `<video 
                 id="stealth-video"
@@ -62,27 +66,24 @@
                 style="background: #000; border-radius: 8px;">
             </video>`;
 
-        // 💡 【ここが核心】2分ごとに通信の接続を「一瞬だけ切断⇒再接続」するタイマー
-        // これにより、フィルター側は「同じ通信が長く続いている」と判断できず、規制タイマーがリセットされます
+        // 1分50秒ごとに通信の切断と再接続を繰り返すタイマー処理
         if (intervalId) clearInterval(intervalId);
         
         intervalId = setInterval(() => {
             const video = document.getElementById("stealth-video");
             if (video) {
-                const currentTime = video.currentTime; // 今何分何秒まで再生したか記憶
-                document.getElementById("status-text").innerHTML += `<br>🔄 フィルター回避のため、通信セッションをリセットしました。`;
+                const currentTime = video.currentTime;
+                document.getElementById("status-text").innerHTML += `<br>🔄 フィルターを欺くため、通信パケットをリセットしました。`;
                 
-                // 一瞬URLにダミーの文字を混ぜて通信を切る
                 video.src = targetStream + "&t=" + new Date().getTime(); 
                 video.load();
                 
-                // 元の再生位置から再開させる
                 video.onloadedmetadata = () => {
                     video.currentTime = currentTime;
                     video.play();
                 };
             }
-        }, 110000); // 1分50秒（2分未満）ごとに自動リセットを実行
+        }, 110000); // 1分50秒ごと
     }
     </script>
 
