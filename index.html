@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>完全突破版 LiteTube (バグ修正済)</title>
+    <title>完全突破版 LiteTube (マルチAPI)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; text-align: center; background: #111; color: #eee; }
         #url { width: 70%; padding: 12px; font-size: 16px; border: 1px solid #444; background: #222; color: #fff; border-radius: 4px; }
@@ -11,61 +11,95 @@
         #status-box { background: #222; border: 1px solid #444; padding: 15px; border-radius: 5px; max-width: 800px; margin: 20px auto; text-align: left; font-family: monospace; font-size: 14px; }
         #player { margin-top: 20px; max-width: 800px; margin-left: auto; margin-right: auto; }
         .info { color: #00ffcc; font-weight: bold; }
+        .alert { color: #ff4757; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>完全規制突破版 LiteTube (バグ修正済)</h2>
-    <p style="font-size: 13px; color: #aaa;">YouTubeが完全遮断されたChromebookでも、動画データを直引きして再生します。</p>
+    <h2>完全規制突破版 LiteTube (マルチAPI仕様)</h2>
+    <p style="font-size: 13px; color: #aaa;">動画が真っ暗な場合は、別のルート（API）に切り替えて再生を試みます。</p>
     
     <input id="url" placeholder="YouTubeの動画URLをペースト">
     <div>
-        <button class="btn" onclick="bypassAndLoad()">動画を強制的に流す</button>
+        <button class="btn" onclick="startBypass(0)">動画を強制的に流す</button>
+        <button class="btn" style="background:#ffc107; color:#111;" onclick="switchNextRoute()">真っ暗なら次のルートを試す</button>
     </div>
 
     <!-- ステータス可視化ログ -->
     <div id="status-box">
         <div><strong>【現在の接続ステータス】</strong></div>
-        <div id="status-text">URLを入力して「動画を強制的に流す」を押してください。</div>
+        <div id="status-text">URLを入力してボタンを押してください。</div>
     </div>
 
     <div id="player"></div>
 
     <script>
-    function bypassAndLoad() {
+    let currentRouteIndex = 0;
+    let detectedVideoId = "";
+
+    // YouTubeから動画データ(MP4)を直接引っこ抜くための現役APIリスト
+    const routes = [
+        { name: "ルートA (Cobalt互換システム)", getUrl: (id) => `https://wuk.sh{id}&quality=720` },
+        { name: "ルートB (Invidiousダイレクト)", getUrl: (id) => `https://yewtu.be{id}&itag=22` },
+        { name: "ルートC (Pipedダイレクトストリーム)", getUrl: (id) => `https://kavin.rocks{id}` }
+    ];
+
+    function startBypass(index) {
         const url = document.getElementById("url").value.trim();
         
-        // YouTubeの各種URLから動画IDを取り出す正規表現
+        // 動画ID（11文字）を正確に抽出
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
-        
-        // 【修正完了】match[2] に入っている動画IDそのものの文字数が「11文字」であるかを正しくチェック
         const videoId = (match && match[2] && match[2].length === 11) ? match[2] : null;
 
         if (!videoId) {
-            alert("URLから動画のID（11文字）が読み取れませんでした。もう一度URLを確認してください。");
+            alert("URLから動画のID（11文字）が読み取れませんでした。");
             return;
         }
 
-        // ログエリアに情報を可視化
+        detectedVideoId = videoId;
+        currentRouteIndex = index;
+        const activeRoute = routes[currentRouteIndex];
+        
+        // 選択されたルートの動画URLを生成
+        let finalStreamUrl = activeRoute.getUrl(detectedVideoId);
+
+        // ログ出力
         document.getElementById("status-text").innerHTML = 
-            `▶ <span class="info">[解析成功]</span> 動画ID: <b>${videoId}</b> を検出しました！<br>` +
-            `YouTubeのサーバーをバイパスし、外部の動画ストリームへ直接接続を試みています...`;
+            `▶ <span class="info">[ID検出成功]</span> 動画ID: <b>${detectedVideoId}</b><br>` +
+            `▶ 現在 <b>${activeRoute.name}</b> を使用して動画データを直引きしています...<br>` +
+            `<small style="color:#aaa;">ダメなら「次のルートを試す」を押してください。</small>`;
 
-        // 外部のオープンソースAPIを利用して、YouTubeの動画を「生MP4ファイル」として裏から引っ張るURL
-        const proxyStreamUrl = `https://wuk.sh{videoId}&quality=720`;
-
-        // iframe（埋め込み）ではなく、ただの動画ファイルを再生するプレイヤー（<video>）として出力
+        // <video>タグを生成して再生を試みる
         document.getElementById("player").innerHTML =
             `<video 
+                id="my-video"
                 width="100%" 
                 height="450" 
-                src="${proxyStreamUrl}" 
+                src="${finalStreamUrl}" 
                 controls 
                 autoplay
+                onerror="handleVideoError()"
                 style="background: #000; border-radius: 8px;">
-                お使いのChromebookでは直接再生がサポートされていません。
+                お使いの端末は直接再生をサポートしていません。
             </video>`;
+    }
+
+    // 動画が読み込めずエラー（真っ暗・停止）になった場合の処理
+    function handleVideoError() {
+        document.getElementById("status-text").innerHTML += 
+            `<br>❌ <span class="alert">[通信失敗]</span> 現在のルートで動画の取得に失敗しました。自動的に次のルートへ切り替えます。`;
+        setTimeout(switchNextRoute, 1500); // 1.5秒後に自動切り替え
+    }
+
+    // 手動または自動で次のルートに切り替える関数
+    function switchNextRoute() {
+        if (!detectedVideoId) {
+            alert("先にURLを入力して一度実行してください。");
+            return;
+        }
+        currentRouteIndex = (currentRouteIndex + 1) % routes.length;
+        startBypass(currentRouteIndex);
     }
     </script>
 
