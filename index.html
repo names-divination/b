@@ -2,104 +2,60 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>LiteTube (画面デバッグ特化版)</title>
+    <title>LiteTube (ダイレクトファイルプレイヤー)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; text-align: center; background: #111; color: #eee; }
         #url { width: 70%; padding: 12px; font-size: 16px; border: 1px solid #444; background: #222; color: #fff; border-radius: 4px; }
         .btn { padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; background: #28a745; color: white; }
-        #debug-log { background: #222; border: 1px solid #444; padding: 15px; border-radius: 5px; max-width: 800px; margin: 20px auto; text-align: left; font-family: monospace; font-size: 13px; color: #00ffcc; line-height: 1.6; word-break: break-all; }
-        pre { background: #000; padding: 10px; border-radius: 4px; color: #ffc107; overflow-x: auto; font-size: 12px; }
+        #status-box { background: #222; border: 1px solid #444; padding: 15px; border-radius: 5px; max-width: 800px; margin: 20px auto; text-align: left; font-family: monospace; font-size: 13px; color: #00ffcc; }
         #player { margin-top: 20px; max-width: 800px; margin-left: auto; margin-right: auto; }
     </style>
 </head>
 <body>
 
-    <h2>LiteTube (画面デバッグ特化版)</h2>
-    <!-- 【修正1】初期値を完全なテストURLに100%一致させました -->
-    <input id="url" placeholder="YouTubeの動画URLをペースト" value="https://youtube.com">
-    <button class="btn" onclick="loadVideo()">動画を流す</button>
+    <h2>LiteTube (ダイレクト再生プレイヤー)</h2>
+    <p style="font-size: 13px; color: #aaa;">変換サイト等で取得した「動画ファイル（MP4形式など）の直リンク」をそのまま貼り付けてください。</p>
+    
+    <input id="url" placeholder="httpから始まる、動画ファイルの直リンクURLをペースト">
+    <button class="btn" onclick="loadDirectVideo()">動画を流す</button>
 
-    <div id="debug-log">
-        <div><strong>【画面内 デバッグログ】</strong></div>
-        <div id="log-text">待機中... URLを入力してボタンを押してください。</div>
+    <div id="status-box">
+        <div><strong>【プレイヤー状態】</strong></div>
+        <div id="log-text">動画ファイルのURLが入力されるのを待っています...</div>
     </div>
 
     <div id="player"></div>
 
     <script>
-    async function loadVideo() {
+    function loadDirectVideo() {
         const log = document.getElementById("log-text");
-        const url = document.getElementById("url").value.trim();
-        
-        log.innerHTML = "⏳ [1/3] URLの解析を開始します...<br>";
+        const videoUrl = document.getElementById("url").value.trim();
 
-        // 動画IDを正確に抽出
-        const regExp = /(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/;
-        const match = url.match(regExp);
-
-        if (!match) {
-            log.innerHTML += "❌ <span style='color:#ff4757;'>エラー: URLから11文字の動画IDが見つかりませんでした。</span>";
+        if (!videoUrl || !videoUrl.startsWith("http")) {
+            alert("正しい動画URL（httpから始まるリンク）を入力してください。");
             return;
         }
 
-        const videoId = match[1]; 
-        log.innerHTML += `✅ 動画ID検出: <b>${videoId}</b><br>`;
-        log.innerHTML += `⏳ [2/3] Cobalt API（/api/json）へリクエスト送信中...<br>`;
+        log.innerHTML = `⏳ 動画の読み込みセッションを開始しました...<br>🔗 対象URL: <small>${videoUrl}</small>`;
 
-        const apiEndpoint = "https://cobalt.tools";
+        // 外部への自動Fetch通信は一切おこなわず、ブラウザ標準のプレイヤー（<video>）にそのままURLを渡す
+        document.getElementById("player").innerHTML =
+            `<video 
+                width="100%" 
+                height="450" 
+                src="${videoUrl}" 
+                controls 
+                autoplay
+                onerror="handleError()"
+                style="background: #000; border-radius: 8px;">
+                お使いのブラウザは直接再生に対応していません。
+            </video>`;
+    }
 
-        try {
-            const response = await fetch(apiEndpoint, {
-                method: "POST",
-                headers: {
-                    "Accept": "application/json",
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    url: `https://youtube.com{videoId}`,
-                    videoQuality: "720",
-                    downloadMode: "video"
-                })
-            });
-
-            // チャッピーさん推薦：ステータスコードを画面に記録
-            log.innerHTML += `📡 HTTPステータス: <b>${response.status}</b><br>`;
-
-            if (!response.ok) {
-                // エラー時も何が返ってきたかテキストで引っこ抜いて画面に出す
-                const errorText = await response.text();
-                throw new Error(`APIがエラーを返しました。<br>【サーバーからの返答】:<br><pre>${errorText}</pre>`);
-            }
-            
-            const data = await response.json();
-            
-            // 【修正2】チャッピーさん大推薦：DevToolsが使えないので、JSONデータを画面に全出力
-            log.innerHTML += `📦 <b>[3/3] APIからの受信データ（生JSON）:</b><br><pre>${JSON.stringify(data, null, 2)}</pre>`;
-            
-            // データ構造の確認とフォールバック
-            const rawVideoUrl = data.url || data.text;
-            
-            if (!rawVideoUrl) {
-                throw new Error("JSONデータ内に動画URL（urlまたはtext）が含まれていませんでした。上記の受信データを確認してください。");
-            }
-            
-            log.innerHTML += `🎉 <span style='color:#00ff00;'>再生用URLの抽出に成功！</span> プレイヤーに流し込みます。`;
-
-            // 動画を再生
-            document.getElementById("player").innerHTML =
-                `<video 
-                    width="100%" 
-                    height="450" 
-                    src="${rawVideoUrl}" 
-                    controls 
-                    autoplay
-                    style="background: #000; border-radius: 8px;">
-                    お使いのブラウザは直接再生に対応していません。
-                </video>`;
-
-        } catch (error) {
-            log.innerHTML += `<br>❌ <span style='color:#ff4757; font-weight:bold;'>処理中断: ${error.message}</span>`;
-        }
+    function handleError() {
+        document.getElementById("log-text").innerHTML = 
+            `❌ <span style='color:#ff4757; font-weight:bold;'>再生失敗：</span> 動画データの読み込みに失敗しました。<br>` +
+            `貼られたリンクの有効期限が切れているか、Chromebookのフィルターがこの動画データ元のサーバーへの接続をブロックしました。`;
     }
     </script>
 
